@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Selasa — Dealer Scheme Engine</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root {
+    --bg: #F6F7F9; --surface: #FFFFFF; --surface-2: #F0F2F5;
+    --text: #1A2233; --muted: #5B6472; --border: #E2E5EA;
+    --primary: #16324F; --primary-soft: #E7EEF3;
+    --accent: #0F8B6C; --accent-soft: #E4F5EF;
+    --warning: #B45309; --warning-soft: #FBF0E1;
+    --danger: #B3261E; --danger-soft: #FBEBEA;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10151C; --surface: #171E28; --surface-2: #1D2530;
+      --text: #E8ECF1; --muted: #93A0B0; --border: #2A3341;
+      --primary: #7FB2DE; --primary-soft: #1E2A38;
+      --accent: #34C795; --accent-soft: #143229;
+      --warning: #E0A458; --warning-soft: #33260F;
+      --danger: #E5837D; --danger-soft: #351A18;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: -apple-system, "Segoe UI", Arial, sans-serif; font-size:14px; line-height:1.5; }
+  .num { font-family: "Courier New", monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---- Login screen ---- */
+  #loginScreen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .login-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:32px 28px; width:100%; max-width:360px; }
+  .login-card h1 { font-size:19px; margin:0 0 4px; } .login-card p { color:var(--muted); font-size:13px; margin:0 0 20px; }
+  .login-error { background:var(--danger-soft); color:var(--danger); border-radius:7px; padding:9px 12px; font-size:12.5px; margin-top:10px; display:none; }
+
+  .app { display:none; min-height:100vh; }
+  .app.active { display:flex; }
+  .sidebar { width:220px; flex:0 0 220px; background:var(--primary); color:#fff; padding:20px 14px; display:flex; flex-direction:column; gap:4px; }
+  .brand-logo { max-width:150px; max-height:56px; margin-bottom:8px; display:block; }
+  .brand { font-weight:700; font-size:17px; margin:4px 8px 18px; }
+  .brand small { display:block; font-weight:500; font-size:11.5px; opacity:.72; margin-top:2px; }
+  .nav-btn { display:flex; align-items:center; gap:9px; padding:9px 10px; border-radius:8px; color:rgba(255,255,255,.82); background:transparent; border:none; cursor:pointer; font-size:13.5px; font-weight:500; text-align:left; width:100%; }
+  .nav-btn:hover { background:rgba(255,255,255,.08); color:#fff; }
+  .nav-btn.active { background:rgba(255,255,255,.16); color:#fff; }
+  .nav-badge { margin-left:auto; background:var(--danger); color:#fff; border-radius:999px; font-size:10.5px; padding:1px 6px; font-weight:700; }
+  .sidebar-footer { margin-top:auto; font-size:11px; opacity:.75; }
+  .sidebar-footer button { width:100%; margin-top:8px; }
+  .main { flex:1 1 auto; min-width:0; padding:26px 30px 60px; max-width:1220px; }
+  .view { display:none; } .view.active { display:block; }
+  h1 { font-size:21px; margin:0 0 4px; } h2 { font-size:15.5px; margin:0 0 2px; }
+  .subhead { color:var(--muted); font-size:13px; margin:0 0 22px; }
+  .page-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px 20px; margin-bottom:18px; }
+  .card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+  .stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+  .stat .label { color:var(--muted); font-size:12px; margin-bottom:6px; }
+  .stat .value { font-size:21px; font-weight:600; } .stat .value.accent{color:var(--accent);} .stat .value.danger{color:var(--danger);}
+  .alert { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:8px; margin-bottom:10px; font-size:13px; }
+  .alert.danger{background:var(--danger-soft);color:var(--danger);} .alert.info{background:var(--primary-soft);color:var(--primary);} .alert.warning{background:var(--warning-soft);color:var(--warning);}
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:var(--muted); font-weight:600; font-size:11.5px; padding:7px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  .table-wrap { overflow-x:auto; } .right{text-align:right;} .center{text-align:center;}
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .badge.accent{background:var(--accent-soft);color:var(--accent);} .badge.warning{background:var(--warning-soft);color:var(--warning);}
+  .badge.danger{background:var(--danger-soft);color:var(--danger);} .badge.muted{background:var(--surface-2);color:var(--muted);}
+  .badge.brand-supreme{background:var(--surface-2);color:var(--muted);} .badge.brand-selasa{background:var(--primary-soft);color:var(--primary);}
+  button,.btn { font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border-radius:7px; padding:8px 14px; border:1px solid var(--border); background:var(--surface); color:var(--text); }
+  button:hover{border-color:var(--primary);} button.primary{background:var(--primary);color:#fff;border-color:var(--primary);}
+  button.ghost{background:transparent;border-color:transparent;color:var(--muted);padding:6px 8px;} button.ghost:hover{color:var(--danger);}
+  button.sm{padding:5px 10px;font-size:12px;} button:disabled{opacity:.45;cursor:not-allowed;}
+  input,select,textarea { font-family:inherit; font-size:13px; padding:8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%; }
+  textarea { font-family:"Courier New",monospace; font-size:12px; min-height:90px; resize:vertical; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; font-weight:500; }
+  .field { margin-bottom:12px; } .form-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; align-items:end; }
+  .form-row .field{margin-bottom:0;}
+  .tabs { display:flex; gap:6px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+  .tab { padding:8px 4px; margin-bottom:-1px; border-bottom:2px solid transparent; color:var(--muted); font-weight:600; font-size:13px; cursor:pointer; background:none; border-top:none; border-left:none; border-right:none; border-radius:0; }
+  .tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .empty { color:var(--muted); text-align:center; padding:30px 10px; font-size:13px; }
+  .banner { display:flex; align-items:center; gap:10px; background:var(--warning-soft); color:var(--warning); border-radius:8px; padding:10px 14px; margin-bottom:18px; font-size:12.5px; }
+  details>summary { cursor:pointer; color:var(--primary); font-size:12.5px; font-weight:600; list-style:none; }
+  details>summary::-webkit-details-marker{display:none;} details[open]>summary{margin-bottom:8px;}
+  @media (max-width:760px){ .app.active{flex-direction:column;} .sidebar{width:100%;flex:none;flex-direction:row;overflow-x:auto;padding:10px 12px;gap:6px;} .brand,.brand-logo,.sidebar-footer{display:none;} .nav-btn{width:auto;white-space:nowrap;} .main{padding:18px 16px 50px;} }
+
+  /* ---- Statement modal ---- */
+  #statementOverlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; align-items:center; justify-content:center; padding:20px; }
+  #statementOverlay.active { display:flex; }
+  #statementCard { background:var(--surface); border-radius:12px; max-width:680px; width:100%; max-height:90vh; overflow-y:auto; padding:0; }
+  .statement-toolbar { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border); }
+  .statement-body { padding:24px 28px; }
+  .statement-body h1 { font-size:20px; margin:0 0 2px; }
+  .statement-body .sub { color:var(--muted); font-size:12.5px; margin-bottom:18px; }
+  .statement-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px; }
+  .statement-box { border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+  .statement-box .label { color:var(--muted); font-size:11.5px; } .statement-box .value { font-size:18px; font-weight:700; margin-top:2px; }
+  .statement-body table { margin-bottom:18px; }
+  .statement-body h2 { font-size:14px; margin:0 0 8px; }
+  @media print {
+    body * { visibility: hidden; }
+    #statementCard, #statementCard * { visibility: visible; }
+    #statementCard { position:absolute; inset:0; max-height:none; box-shadow:none; border-radius:0; }
+    .statement-toolbar { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="statementOverlay">
+  <div id="statementCard">
+    <div class="statement-toolbar">
+      <b>Dealer Statement</b>
+      <div><button class="primary sm" onclick="window.print()">🖨 Print</button> <button class="ghost sm" onclick="closeStatement()">Close</button></div>
+    </div>
+    <div class="statement-body" id="statementBody"></div>
+  </div>
+</div>
+
+<!-- ============================== LOGIN ============================== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>Selasa — Dealer Scheme Engine</h1>
+    <p>Sign in with the account your admin created for you.</p>
+    <div class="field"><label>Email</label><input type="email" id="loginEmail" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
+    <button class="primary" id="loginBtn" style="width:100%">Sign in</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ============================== APP ============================== -->
+<div class="app" id="appRoot">
+  <nav class="sidebar">
+    <img id="sidebarLogo" class="brand-logo" style="display:none">
+    <div class="brand">Selasa<small>Dealer Scheme Engine</small></div>
+    <button class="nav-btn active" data-view="dashboard">📊 Dashboard</button>
+    <button class="nav-btn" data-view="dealers">🧾 Dealers</button>
+    <button class="nav-btn" data-view="invoices">📄 Invoices</button>
+    <button class="nav-btn" data-view="receipts">💳 Receipts</button>
+    <button class="nav-btn" data-view="creditnotes">🏷️ Credit Notes<span class="nav-badge" id="cnBadge" style="display:none">0</span></button>
+    <button class="nav-btn" data-view="tally">🔄 Tally Integration</button>
+    <button class="nav-btn" data-view="settings">⚙️ Settings</button>
+    <div class="sidebar-footer">Signed in as <span id="userEmail"></span><button class="sm" id="signOutBtn">Sign out</button></div>
+  </nav>
+
+  <main class="main">
+    <div id="connBanner" class="banner" style="display:none">⚠️ <span id="connBannerText">Can't reach the database.</span></div>
+
+    <section class="view active" id="view-dashboard">
+      <div class="page-head"><div><h1>Dashboard</h1><p class="subhead">Live scheme achievement across all dealers, as of today</p></div></div>
+      <div id="alertZone"></div>
+      <div class="stat-row" id="statRow"></div>
+      <div class="card">
+        <div class="card-head"><h2>Dealer standing</h2><span class="hint" id="dealerCount"></span></div>
+        <div class="table-wrap"><table id="dashTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-dealers">
+      <div class="page-head"><div><h1>Dealers</h1><p class="subhead">Segment decides which schemes apply; CD mode decides how Supreme + Selasa payments are matched</p></div></div>
+      <div class="card">
+        <div class="card-head"><h2>Add a dealer</h2></div>
+        <div class="form-row">
+          <div class="field"><label>Dealer ID</label><input id="dealerIdInput" placeholder="D001"></div>
+          <div class="field"><label>Dealer name</label><input id="dealerNameInput" placeholder="Sharma Sanitations"></div>
+          <div class="field"><label>Segment</label><select id="dealerSegmentInput" onchange="onSegmentChange()">
+            <option value="Associate">Associate Partner</option>
+            <option value="Growth">Growth Partner</option>
+            <option value="Elite">Elite Partner (no schemes)</option>
+          </select></div>
+        </div>
+        <div class="form-row" style="margin-top:10px" id="cdModeRow">
+          <div class="field"><label>Cash Discount mode</label><select id="dealerCdModeInput" onchange="onCdModeChange()">
+            <option value="combined">Combined — all Supreme + Selasa invoices, all dates</option>
+            <option value="freeze">Freeze backlog — only invoices from a cutover date count</option>
+          </select></div>
+          <div class="field" id="cutoverDateField" style="display:none"><label>Freeze cutover date</label><input type="date" id="dealerCutoverInput"></div>
+          <div class="field"><label>Tally ledger name (for the future bridge)</label><input id="dealerLedgerInput" placeholder="Exact name as in Tally"></div>
+        </div>
+        <button class="primary" id="addDealerBtn" style="margin-top:12px">Add dealer</button>
+        <p class="hint">Growth Partners always use Combined mode (no freeze option) and only earn Cash Discount — no QTD/ATD/First Order. Elite Partners get no schemes at all.</p>
+        <details style="margin-top:14px"><summary>Bulk import from CSV</summary>
+          <p class="hint">Columns: <code>dealer_id,dealer_name,segment,cd_mode,cutover_date</code> (segment: Associate/Growth/Elite; cd_mode: combined/freeze; cutover_date YYYY-MM-DD, blank if combined)</p>
+          <textarea id="dealerCsv" placeholder="dealer_id,dealer_name,segment,cd_mode,cutover_date&#10;D001,Sharma Sanitations,Associate,freeze,2026-06-01"></textarea>
+          <button class="sm" style="margin-top:8px" id="importDealersBtn">Import rows</button>
+        </details>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>All dealers</h2></div>
+        <div class="table-wrap"><table><thead><tr><th>ID</th><th>Name</th><th>Segment</th><th>CD mode</th><th>Cutover</th><th></th></tr></thead><tbody id="dealerTableBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-invoices">
+      <div class="page-head"><div><h1>Invoices</h1><p class="subhead">Tag every bill with its brand — Supreme invoices only ever affect Cash Discount, never QTD/ATD/First Order</p></div></div>
+      <div class="card">
+        <div class="card-head"><h2>Add an invoice</h2></div>
+        <div class="form-row">
+          <div class="field"><label>Invoice no.</label><input id="invNoInput" placeholder="INV-1042"></div>
+          <div class="field"><label>Dealer</label><select id="invDealerInput"></select></div>
+          <div class="field"><label>Brand</label><select id="invBrandInput"><option value="Selasa">Selasa</option><option value="Supreme">Supreme</option></select></div>
+          <div class="field"><label>Invoice date</label><input type="date" id="invDateInput"></div>
+          <div class="field"><label>Bill value (₹)</label><input type="number" id="invValueInput" placeholder="185000"></div>
+        </div>
+        <button class="primary" id="addInvoiceBtn" style="margin-top:12px">Add invoice</button>
+        <details style="margin-top:14px"><summary>Bulk import from CSV</summary>
+          <p class="hint">Columns: <code>invoice_no,dealer_id,brand,date,bill_value</code> — brand as Supreme or Selasa, date as YYYY-MM-DD.</p>
+          <textarea id="invoiceCsv" placeholder="invoice_no,dealer_id,brand,date,bill_value&#10;INV-1001,D001,Selasa,2026-04-05,185000"></textarea>
+          <button class="sm" style="margin-top:8px" id="importInvoicesBtn">Import rows</button>
+        </details>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>All invoices</h2><span class="hint" id="invCount"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Dealer</th><th>Brand</th><th>Date</th><th class="right">Bill value</th><th class="right">Outstanding</th><th></th></tr></thead><tbody id="invTableBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-receipts">
+      <div class="page-head"><div><h1>Receipts</h1><p class="subhead">One combined ledger — flag each entry as actual cash or a product-scheme credit note. Both reduce what's owed; only cash earns Cash Discount.</p></div></div>
+      <div class="card">
+        <div class="card-head"><h2>Add a receipt</h2></div>
+        <div class="form-row">
+          <div class="field"><label>Receipt no.</label><input id="rcpNoInput" placeholder="RC-501"></div>
+          <div class="field"><label>Dealer</label><select id="rcpDealerInput"></select></div>
+          <div class="field"><label>Type</label><select id="rcpTypeInput" onchange="onRcpTypeChange()"><option value="cash">Actual cash received</option><option value="product_scheme">Product scheme credit note</option></select></div>
+          <div class="field"><label>Payment date</label><input type="date" id="rcpDateInput"></div>
+          <div class="field"><label>Amount (₹)</label><input type="number" id="rcpAmountInput" placeholder="100000"></div>
+        </div>
+        <div class="field" id="rcpNoteField" style="display:none;margin-top:10px"><label>Reason / scheme reference</label><input id="rcpNoteInput" placeholder="e.g. Diwali sink bundle scheme"></div>
+        <button class="primary" id="addReceiptBtn" style="margin-top:12px">Add receipt</button>
+        <details style="margin-top:14px"><summary>Bulk import from CSV</summary>
+          <p class="hint">Columns: <code>receipt_no,dealer_id,date,amount,type,note</code> — type is cash or product_scheme (blank = cash), note is optional.</p>
+          <textarea id="receiptCsv" placeholder="receipt_no,dealer_id,date,amount,type,note&#10;RC-501,D001,2026-04-01,100000,cash,"></textarea>
+          <button class="sm" style="margin-top:8px" id="importReceiptsBtn">Import rows</button>
+        </details>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>All receipts</h2><span class="hint" id="rcpCount"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>Receipt</th><th>Dealer</th><th>Type</th><th>Date</th><th class="right">Amount</th><th>Note</th><th></th></tr></thead><tbody id="rcpTableBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-creditnotes">
+      <div class="page-head"><div><h1>Credit note register</h1><p class="subhead">GST-inclusive amounts split for the CN voucher, one line per rate applied</p></div><button id="exportCnBtn">⬇ Export CSV</button></div>
+      <div class="tabs"><button class="tab active" data-cnfilter="pending">Pending</button><button class="tab" data-cnfilter="posted">Posted</button><button class="tab" data-cnfilter="all">All</button></div>
+      <div class="card">
+        <div class="table-wrap"><table><thead><tr><th>Dealer</th><th>Scheme</th><th>Reference</th><th class="right">Taxable value</th><th class="right">GST (18%)</th><th class="right">CN value</th><th class="center">Status</th></tr></thead><tbody id="cnTableBody"></tbody></table></div>
+        <div class="empty" id="cnEmpty" style="display:none">No credit notes in this view yet.</div>
+      </div>
+    </section>
+
+    <section class="view" id="view-tally">
+      <div class="page-head"><div><h1>Tally Integration</h1><p class="subhead">Not connected yet — here's the plan for when you're ready</p></div></div>
+      <div class="card">
+        <p>Since this app now lives on the web (not on your office PC), it has no way to reach Tally directly — a cloud server can't see into your office network. That's a hard limit, not a bug.</p>
+        <p>The path to real automation later is a small <b>bridge script</b>: a lightweight program that runs on the same office PC as Tally, reads the Sales/Receipt Registers from Tally's local connection, and pushes that data up to this same database over the internet. Nothing else about this app would need to change — the bridge would just fill in Dealers/Invoices/Receipts automatically, the same tables you're already using by hand.</p>
+        <p class="hint">This isn't built yet — flagged here so it's easy to pick up later. Manual entry and CSV import (Dealers/Invoices/Receipts tabs) are fully reliable right now and will keep working exactly the same after a bridge is added.</p>
+      </div>
+    </section>
+
+    <section class="view" id="view-settings">
+      <div class="page-head"><div><h1>Settings</h1><p class="subhead">Scheme parameters and branding</p></div></div>
+      <div class="card">
+        <h2>Brand logo</h2>
+        <p class="hint" style="margin-bottom:10px">Shown in the sidebar. Keep it small — under 500KB works best.</p>
+        <input type="file" id="logoUpload" accept="image/*">
+        <div id="logoPreviewWrap" style="margin-top:10px;display:none"><img id="logoPreview" style="max-width:180px;max-height:70px;display:block"></div>
+      </div>
+      <div class="card">
+        <h2>Cash Discount ladder (additional %, on the bill value already booked)</h2>
+        <div class="form-row" style="margin-top:10px">
+          <div class="field"><label>Advance (before dispatch)</label><input type="number" step="0.1" id="s_cdAdvancePct"></div>
+          <div class="field"><label>Within 30 days</label><input type="number" step="0.1" id="s_cd30Pct"></div>
+          <div class="field"><label>Within 45 days</label><input type="number" step="0.1" id="s_cd45Pct"></div>
+          <div class="field"><label>Within 60 days</label><input type="number" step="0.1" id="s_cd60Pct"></div>
+          <div class="field"><label>Defaulter flag after (days)</label><input type="number" id="s_defaulterDays"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Quarterly Turnover Discount (Selasa only, Associate Partners)</h2>
+        <div class="form-row" style="margin-top:10px">
+          <div class="field"><label>Minimum billing to qualify (₹)</label><input type="number" id="s_qtdThreshold"></div>
+          <div class="field"><label>Discount if achieved (%)</label><input type="number" step="0.1" id="s_qtdPct"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Annual Turnover Discount (Selasa only, Associate Partners)</h2>
+        <div class="field" style="max-width:220px"><label>Launch financial year (halved slabs apply here)</label><input id="s_launchFY" placeholder="2026-27"></div>
+        <p class="hint" style="margin:6px 0 10px">Standard slabs (auto-halved for the launch year above, percentages unchanged):</p>
+        <div class="table-wrap"><table><thead><tr><th>Min (₹)</th><th>Max (₹, blank = no upper limit)</th><th>Discount (%)</th></tr></thead><tbody id="atdSlabBody"></tbody></table></div>
+      </div>
+      <div class="card">
+        <h2>First-Time Order Support (Selasa only, Associate Partners)</h2>
+        <div class="field" style="max-width:220px"><label>One-time discount on a dealer's first-ever Selasa order (%)</label><input type="number" step="0.1" id="s_firstOrderPct"></div>
+      </div>
+      <button class="primary" id="saveSettingsBtn">Save settings</button>
+      <span class="hint" id="settingsSavedMsg" style="margin-left:10px"></span>
+    </section>
+  </main>
+</div>
+
+<script>
+// ============================== SUPABASE SETUP ==============================
+// Replace these two with your own project's values (Supabase dashboard -> Settings -> API)
+const SUPABASE_URL = 'https://rqvsrghvwqshqysidxny.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_hLqekUmMFUnpBOvv_eZbhw_-i6-A7UY';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============================== ENGINE (unchanged logic) ==============================
+function daysBetween(d1,d2){return Math.round((d2.getTime()-d1.getTime())/86400000);}
+function cdTierFor(dayDiff,s){ if(dayDiff<=0)return{pct:s.cdAdvancePct,label:'Advance (before dispatch)'}; if(dayDiff<=30)return{pct:s.cd30Pct,label:'Within 30 days'}; if(dayDiff<=45)return{pct:s.cd45Pct,label:'Within 45 days'}; if(dayDiff<=60)return{pct:s.cd60Pct,label:'Within 60 days'}; return{pct:0,label:dayDiff>=s.defaulterDays?'Defaulter zone':'No CD window'}; }
+function getFYLabel(date){const y=date.getFullYear(),m=date.getMonth(); return m>=3?`${y}-${String((y+1)%100).padStart(2,'0')}`:`${y-1}-${String(y%100).padStart(2,'0')}`;}
+function getWindowName(date){const m=date.getMonth(); if(m>=3&&m<=6)return'Apr-Jul'; if(m>=7&&m<=10)return'Aug-Nov'; return'Dec-Mar';}
+function fyStartYear(fy){return parseInt(fy.split('-')[0],10);}
+function getWindowEndDate(fy,w){const sy=fyStartYear(fy); if(w==='Apr-Jul')return new Date(sy,6,31); if(w==='Aug-Nov')return new Date(sy,10,30); return new Date(sy+1,2,31);}
+function getFYEndDate(fy){const sy=fyStartYear(fy); return new Date(sy+1,2,31);}
+function atdSlabsFor(fy,s){const halve=fy===s.launchFY; return (s.atdSlabs||[]).map(sl=>({min:halve?sl.min/2:sl.min,max:sl.max==null?null:(halve?sl.max/2:sl.max),pct:sl.pct}));}
+function slabForAmount(amount,slabs){for(const sl of slabs) if(amount>=sl.min&&(sl.max==null||amount<sl.max)) return sl; return null;}
+
+function fifoWithCredits(invoiceSubset, creditEvents, settings) {
+  const invs = invoiceSubset.map(i=>({...i,remaining:i.billValue,tranches:[]})).sort((a,b)=>a.date-b.date);
+  const byId = Object.fromEntries(invs.map(i=>[i.id,i]));
+  const events = [...creditEvents].sort((a,b)=>a.date-b.date);
+  let invIdx=0, unallocatedAdvance=0;
+  function allocateToQueue(amount, date, earnsCD, label) {
+    let rem = amount;
+    while (rem>1e-9 && invIdx<invs.length) {
+      const inv=invs[invIdx];
+      if (inv.remaining<=1e-9) { invIdx++; continue; }
+      const alloc=Math.min(rem,inv.remaining);
+      inv.remaining-=alloc; rem-=alloc;
+      const dayDiff=daysBetween(inv.date,date);
+      const tier = earnsCD ? cdTierFor(dayDiff,settings) : {pct:0,label};
+      inv.tranches.push({amount:alloc,date,dayDiff,pct:tier.pct,label:tier.label});
+      if (inv.remaining<=1e-9) invIdx++;
+    }
+    if (rem>1e-9) unallocatedAdvance += rem;
+  }
+  for (const ev of events) {
+    if (ev.targetInvoiceId) {
+      const inv = byId[ev.targetInvoiceId];
+      if (!inv) continue;
+      const alloc = Math.min(ev.amount, inv.remaining);
+      inv.remaining -= alloc;
+      if (alloc>1e-9) inv.tranches.push({amount:alloc,date:ev.date,dayDiff:null,pct:0,label:ev.label||'Scheme credit (targeted)'});
+      const leftover = ev.amount - alloc;
+      if (leftover>1e-9) allocateToQueue(leftover, ev.date, false, 'Scheme credit (overflow)');
+    } else {
+      allocateToQueue(ev.amount, ev.date, ev.earnsCD, ev.label);
+    }
+  }
+  for (const inv of invs) inv.cdEarned = inv.tranches.filter(t=>t.pct>0).reduce((s,t)=>s+t.amount*t.pct/100,0);
+  return { invoices: invs, unallocatedAdvance };
+}
+
+function computeDealer(dealer, invoices, receipts, postedCredits, settings, today) {
+  const allInvs = invoices.filter(i=>i.dealerId===dealer.id).map(i=>({...i,date:new Date(i.date)}));
+  const allRcpts = receipts.filter(r=>r.dealerId===dealer.id).map(r=>({...r,date:new Date(r.date)}));
+  const allPosted = postedCredits.filter(c=>c.dealerId===dealer.id);
+  const segment = dealer.segment || 'Associate';
+  const effectiveCdMode = segment==='Growth' ? 'combined' : (dealer.cdMode||'combined');
+  const cutover = dealer.cdCutoverDate ? new Date(dealer.cdCutoverDate) : null;
+
+  let cdEligibleInvoices=allInvs, cdEligibleReceipts=allRcpts, cdEligiblePosted=allPosted;
+  if (segment==='Elite') { cdEligibleInvoices=[]; cdEligibleReceipts=[]; cdEligiblePosted=[]; }
+  else if (effectiveCdMode==='freeze' && cutover) {
+    cdEligibleInvoices = allInvs.filter(i=>i.date>=cutover);
+    cdEligibleReceipts = allRcpts.filter(r=>r.date>=cutover);
+    cdEligiblePosted = allPosted.filter(c=>c.date>=cutover);
+  }
+  const creditEvents = [
+    ...cdEligibleReceipts.map(r=>({date:r.date, amount:r.amount, earnsCD:r.type==='cash', targetInvoiceId:null, label:r.type==='product_scheme'?('Product scheme credit'+(r.note?': '+r.note:'')):null})),
+    ...cdEligiblePosted.map(c=>({date:c.date, amount:c.amount, earnsCD:false, targetInvoiceId:c.targetInvoiceId||null, label:`${c.kind} (posted)`})),
+  ];
+  const cdResult = segment==='Elite' ? {invoices:[],unallocatedAdvance:0} : fifoWithCredits(cdEligibleInvoices, creditEvents, settings);
+  const cdInvoices = cdResult.invoices;
+  const totalCD = cdInvoices.reduce((s,i)=>s+i.cdEarned,0);
+
+  const agingEvents = [
+    ...allRcpts.map(r=>({date:r.date, amount:r.amount, earnsCD:false, targetInvoiceId:null})),
+    ...allPosted.map(c=>({date:c.date, amount:c.amount, earnsCD:false, targetInvoiceId:c.targetInvoiceId||null})),
+  ];
+  const agingResult = fifoWithCredits(allInvs, agingEvents, settings);
+  const defaulterInvoices = agingResult.invoices.filter(i=>i.remaining>1e-9 && daysBetween(i.date,today)>=settings.defaulterDays);
+
+  let qtdResults=[], totalQTD=0, atdResults=[], totalATD=0, firstOrder=null;
+  if (segment === 'Associate') {
+    const selasaInvs = allInvs.filter(i=>i.brand==='Selasa').sort((a,b)=>a.date-b.date);
+    const windowTotals = {};
+    for (const inv of selasaInvs) { const fy=getFYLabel(inv.date), win=getWindowName(inv.date), key=fy+'|'+win; if(!windowTotals[key])windowTotals[key]={fy,window:win,billed:0}; windowTotals[key].billed+=inv.billValue; }
+    qtdResults = Object.values(windowTotals).map(w=>{ const endDate=getWindowEndDate(w.fy,w.window), finalized=today>endDate, achieved=w.billed>=settings.qtdThreshold; return {...w,endDate,finalized,achieved,earned:(finalized&&achieved)?w.billed*settings.qtdPct/100:0,projected:(!finalized&&achieved)?w.billed*settings.qtdPct/100:0,gapToThreshold:Math.max(0,settings.qtdThreshold-w.billed)}; }).sort((a,b)=>getWindowEndDate(a.fy,a.window)-getWindowEndDate(b.fy,b.window));
+    totalQTD = qtdResults.reduce((s,w)=>s+w.earned,0);
+    const fyTotals = {};
+    for (const inv of selasaInvs) { const fy=getFYLabel(inv.date); fyTotals[fy]=(fyTotals[fy]||0)+inv.billValue; }
+    atdResults = Object.entries(fyTotals).map(([fy,billed])=>{ const slabs=atdSlabsFor(fy,settings), slab=slabForAmount(billed,slabs), endDate=getFYEndDate(fy), finalized=today>endDate, nextSlab=slabs.find(sl=>sl.min>billed); return {fy,billed,slab,endDate,finalized,earned:(finalized&&slab)?billed*slab.pct/100:0,projected:(!finalized&&slab)?billed*slab.pct/100:0,gapToNextSlab:nextSlab?nextSlab.min-billed:0,nextSlabPct:nextSlab?nextSlab.pct:null}; }).sort((a,b)=>a.fy.localeCompare(b.fy));
+    totalATD = atdResults.reduce((s,a)=>s+a.earned,0);
+    if (selasaInvs.length>0) { const f=selasaInvs[0]; firstOrder={invoiceId:f.id,date:f.date,billValue:f.billValue,earned:f.billValue*settings.firstOrderPct/100}; }
+  }
+  return { dealerId:dealer.id, segment, effectiveCdMode, cdInvoices, totalCD, defaulterInvoices, qtdResults, totalQTD, atdResults, totalATD, firstOrder, grandTotalCN: totalCD+totalQTD+totalATD+(firstOrder?firstOrder.earned:0) };
+}
+
+// ============================== STATE + SUPABASE DATA LAYER ==============================
+let state = { dealers:[], invoices:[], receipts:[], settings:{atdSlabs:[]}, cnStatus:{}, postedCredits:[], logo:null };
+let editingDealerId=null, editingInvoiceId=null, editingReceiptId=null, cnFilter='pending';
+let pollTimer = null;
+
+async function refreshState() {
+  try {
+    const [dealersRes, invoicesRes, receiptsRes, settingsRes, cnRes] = await Promise.all([
+      sb.from('dealers').select('*'),
+      sb.from('invoices').select('*'),
+      sb.from('receipts').select('*'),
+      sb.from('settings').select('*').eq('id', 1).single(),
+      sb.from('cn_status').select('*'),
+    ]);
+    for (const r of [dealersRes, invoicesRes, receiptsRes, settingsRes, cnRes]) if (r.error) throw r.error;
+    state.dealers = dealersRes.data.map(d=>({ id:d.id, name:d.name, segment:d.segment, cdMode:d.cd_mode, cdCutoverDate:d.cd_cutover_date, tallyLedgerName:d.tally_ledger_name }));
+    state.invoices = invoicesRes.data.map(i=>({ id:i.id, dealerId:i.dealer_id, brand:i.brand, date:i.invoice_date, billValue:parseFloat(i.bill_value) }));
+    state.receipts = receiptsRes.data.map(r=>({ id:r.id, dealerId:r.dealer_id, date:r.receipt_date, amount:parseFloat(r.amount), type:r.type||'cash', note:r.note||'' }));
+    state.settings = settingsRes.data.data;
+    state.logo = state.settings.logo || null;
+    state.cnStatus = {};
+    state.postedCredits = [];
+    cnRes.data.forEach(c=>{
+      state.cnStatus[c.line_id] = { posted:c.posted, postedAt:c.posted_at, amount:c.amount, dealerId:c.dealer_id, targetInvoiceId:c.target_invoice_id, kind:c.scheme_kind, refLabel:c.ref_label };
+      if (c.posted && c.dealer_id && c.amount != null && c.scheme_kind) {
+        state.postedCredits.push({ id:c.line_id, dealerId:c.dealer_id, amount:parseFloat(c.amount), targetInvoiceId:c.target_invoice_id, kind:c.scheme_kind, date:new Date(c.posted_at) });
+      }
+    });
+    document.getElementById('connBanner').style.display = 'none';
+    if (state.logo) { document.getElementById('sidebarLogo').src = state.logo; document.getElementById('sidebarLogo').style.display='block'; }
+    renderAll();
+  } catch (e) {
+    document.getElementById('connBanner').style.display = 'flex';
+    document.getElementById('connBannerText').textContent = "Can't reach the database (" + (e.message||e) + "). Check your internet connection.";
+  }
+}
+
+// ============================== AUTH ==============================
+async function showApp(session) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appRoot').classList.add('active');
+  document.getElementById('userEmail').textContent = session.user.email;
+  await refreshState();
+  if (!pollTimer) pollTimer = setInterval(refreshState, 6000);
+}
+function showLogin() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appRoot').classList.remove('active');
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+sb.auth.onAuthStateChange((event, session) => { if (session) showApp(session); else showLogin(); });
+sb.auth.getSession().then(({ data: { session } }) => { if (session) showApp(session); else showLogin(); });
+
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; }
+});
+document.getElementById('signOutBtn').addEventListener('click', async () => { await sb.auth.signOut(); });
+
+// ============================== FORMAT / CSV ==============================
+function inr(n){ n=Math.round((n||0)*100)/100; const neg=n<0; n=Math.abs(n); const parts=n.toFixed(2).split('.'); let intPart=parts[0]; let last3=intPart.slice(-3); let rest=intPart.slice(0,-3); if(rest!=='')last3=','+last3; rest=rest.replace(/\B(?=(\d{2})+(?!\d))/g,','); return (neg?'-':'')+'₹'+rest+last3+(parts[1]!=='00'?'.'+parts[1]:''); }
+function fmtDate(d){ return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function parseCsv(text){ const lines=text.trim().split(/\r?\n/).filter(l=>l.trim().length); if(lines.length<2)return[]; const headers=lines[0].split(',').map(h=>h.trim()); return lines.slice(1).map(line=>{ const cells=line.split(',').map(c=>c.trim()); const row={}; headers.forEach((h,i)=>row[h]=cells[i]!==undefined?cells[i]:''); return row; }); }
+
+// ============================== NAV ==============================
+document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>{
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  btn.classList.add('active'); document.getElementById('view-'+btn.dataset.view).classList.add('active');
+}));
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); cnFilter=t.dataset.cnfilter; renderCreditNotes(); }));
+function onSegmentChange(){ const seg=document.getElementById('dealerSegmentInput').value; document.getElementById('cdModeRow').style.display = seg==='Elite' ? 'none' : 'grid'; if(seg==='Growth'){ document.getElementById('dealerCdModeInput').value='combined'; document.getElementById('dealerCdModeInput').disabled=true; document.getElementById('cutoverDateField').style.display='none'; } else { document.getElementById('dealerCdModeInput').disabled=false; } }
+function onCdModeChange(){ document.getElementById('cutoverDateField').style.display = document.getElementById('dealerCdModeInput').value==='freeze' ? 'block' : 'none'; }
+
+// ============================== RENDER ==============================
+function dealerName(id){ const d=state.dealers.find(x=>x.id===id); return d?d.name:id; }
+function dealerObj(id){ return state.dealers.find(x=>x.id===id); }
+
+function renderDealerDropdowns(){
+  const opts = '<option value="">Select dealer…</option>' + state.dealers.map(d=>`<option value="${d.id}">${d.id} — ${d.name}</option>`).join('');
+  document.getElementById('invDealerInput').innerHTML = opts;
+  document.getElementById('rcpDealerInput').innerHTML = opts;
+}
+
+function renderDealersTable(){
+  const tbody = document.getElementById('dealerTableBody');
+  if (!state.dealers.length) { tbody.innerHTML='<tr><td colspan="6" class="empty">No dealers yet.</td></tr>'; return; }
+  tbody.innerHTML = state.dealers.map(d=>{
+    if (editingDealerId===d.id) {
+      return `<tr><td class="num">${d.id}</td>
+        <td><input id="editDealerName_${d.id}" value="${d.name.replace(/"/g,'&quot;')}"></td>
+        <td><select id="editDealerSegment_${d.id}">
+          <option value="Associate" ${d.segment==='Associate'?'selected':''}>Associate</option>
+          <option value="Growth" ${d.segment==='Growth'?'selected':''}>Growth</option>
+          <option value="Elite" ${d.segment==='Elite'?'selected':''}>Elite</option>
+        </select></td>
+        <td><select id="editDealerCdMode_${d.id}">
+          <option value="combined" ${d.cdMode==='combined'?'selected':''}>Combined</option>
+          <option value="freeze" ${d.cdMode==='freeze'?'selected':''}>Freeze</option>
+        </select></td>
+        <td><input type="date" id="editDealerCutover_${d.id}" value="${d.cdCutoverDate?d.cdCutoverDate.slice(0,10):''}"></td>
+        <td style="white-space:nowrap"><button class="sm primary" onclick="saveEditDealer('${d.id}')">Save</button> <button class="ghost sm" onclick="cancelEditDealer()">Cancel</button></td></tr>`;
+    }
+    return `<tr><td class="num">${d.id}</td><td>${d.name}</td><td>${d.segment}</td><td>${d.segment==='Elite'?'—':(d.segment==='Growth'?'Combined (fixed)':(d.cdMode==='freeze'?'Freeze':'Combined'))}</td><td>${d.cdMode==='freeze'&&d.cdCutoverDate?fmtDate(new Date(d.cdCutoverDate)):'—'}</td>
+      <td style="white-space:nowrap"><button class="sm" onclick="startEditDealer('${d.id}')">Edit</button> <button class="ghost sm" onclick="deleteDealer('${d.id}')">Remove</button></td></tr>`;
+  }).join('');
+}
+function startEditDealer(id){ editingDealerId=id; renderDealersTable(); }
+function cancelEditDealer(){ editingDealerId=null; renderDealersTable(); }
+async function saveEditDealer(id){
+  const d = dealerObj(id);
+  const name = document.getElementById('editDealerName_'+id).value.trim();
+  const segment = document.getElementById('editDealerSegment_'+id).value;
+  const cdMode = document.getElementById('editDealerCdMode_'+id).value;
+  const cdCutoverDate = document.getElementById('editDealerCutover_'+id).value || null;
+  if (!name) return alert('Name cannot be empty.');
+  editingDealerId = null;
+  const { error } = await sb.from('dealers').upsert({ id, name, segment, cd_mode: cdMode, cd_cutover_date: cdCutoverDate, tally_ledger_name: d.tallyLedgerName });
+  if (error) alert('Save failed: ' + error.message);
+  refreshState();
+}
+async function deleteDealer(id){ if(!confirm('Remove this dealer?'))return; const {error}=await sb.from('dealers').delete().eq('id',id); if(error) alert('Delete failed: '+error.message); refreshState(); }
+
+function renderInvoicesTable(){
+  const tbody = document.getElementById('invTableBody');
+  document.getElementById('invCount').textContent = state.invoices.length + ' invoices';
+  if (!state.invoices.length) { tbody.innerHTML='<tr><td colspan="7" class="empty">No invoices yet.</td></tr>'; return; }
+  const today = new Date();
+  const sorted = [...state.invoices].map(i=>({...i,date:new Date(i.date)})).sort((a,b)=>b.date-a.date);
+  const dealerOpts = d => state.dealers.map(x=>`<option value="${x.id}" ${x.id===d?'selected':''}>${x.id} — ${x.name}</option>`).join('');
+  tbody.innerHTML = sorted.map(inv=>{
+    if (editingInvoiceId===inv.id) {
+      return `<tr><td>${inv.id}</td>
+        <td><select id="editInvDealer_${inv.id}">${dealerOpts(inv.dealerId)}</select></td>
+        <td><select id="editInvBrand_${inv.id}"><option value="Selasa" ${inv.brand==='Selasa'?'selected':''}>Selasa</option><option value="Supreme" ${inv.brand==='Supreme'?'selected':''}>Supreme</option></select></td>
+        <td><input type="date" id="editInvDate_${inv.id}" value="${inv.date.toISOString().slice(0,10)}"></td>
+        <td class="right"><input type="number" id="editInvValue_${inv.id}" value="${inv.billValue}"></td><td></td>
+        <td style="white-space:nowrap"><button class="sm primary" onclick="saveEditInvoice('${inv.id}')">Save</button> <button class="ghost sm" onclick="cancelEditInvoice()">Cancel</button></td></tr>`;
+    }
+    const dealer = dealerObj(inv.dealerId) || {id:inv.dealerId, segment:'Associate', cdMode:'combined'};
+    const dealerInvs = state.invoices.filter(i=>i.dealerId===inv.dealerId);
+    const dealerRcpts = state.receipts.filter(r=>r.dealerId===inv.dealerId);
+    const r = computeDealer(dealer, dealerInvs, dealerRcpts, state.postedCredits, state.settings, today);
+    const thisInv = r.cdInvoices.find(x=>x.id===inv.id);
+    const agingRef = r.defaulterInvoices.find(x=>x.id===inv.id);
+    const outstanding = agingRef ? agingRef.remaining : (thisInv ? thisInv.remaining : null);
+    const aged = !!agingRef;
+    return `<tr><td>${inv.id}</td><td>${dealerName(inv.dealerId)}</td><td><span class="badge brand-${inv.brand.toLowerCase()}">${inv.brand}</span></td><td>${fmtDate(inv.date)}</td>
+      <td class="right num">${inr(inv.billValue)}</td>
+      <td class="right num">${outstanding!==null && outstanding>1e-9 ? inr(outstanding) : '—'} ${aged?'<span class="badge danger">75+ days</span>':''}</td>
+      <td style="white-space:nowrap"><button class="sm" onclick="startEditInvoice('${inv.id}')">Edit</button> <button class="ghost sm" onclick="deleteInvoice('${inv.id}')">Remove</button></td></tr>`;
+  }).join('');
+}
+function startEditInvoice(id){ editingInvoiceId=id; renderInvoicesTable(); }
+function cancelEditInvoice(){ editingInvoiceId=null; renderInvoicesTable(); }
+async function saveEditInvoice(id){
+  const dealerId=document.getElementById('editInvDealer_'+id).value, brand=document.getElementById('editInvBrand_'+id).value;
+  const dateVal=document.getElementById('editInvDate_'+id).value, billValue=parseFloat(document.getElementById('editInvValue_'+id).value);
+  if(!dealerId||!dateVal||!billValue) return alert('All fields are required.');
+  editingInvoiceId=null;
+  const { error } = await sb.from('invoices').upsert({ id, dealer_id:dealerId, brand, invoice_date:dateVal, bill_value:billValue });
+  if (error) alert('Save failed: ' + error.message);
+  refreshState();
+}
+async function deleteInvoice(id){ if(!confirm('Remove this invoice?'))return; const {error}=await sb.from('invoices').delete().eq('id',id); if(error) alert('Delete failed: '+error.message); refreshState(); }
+
+function renderReceiptsTable(){
+  const tbody = document.getElementById('rcpTableBody');
+  document.getElementById('rcpCount').textContent = state.receipts.length + ' receipts';
+  if (!state.receipts.length) { tbody.innerHTML='<tr><td colspan="7" class="empty">No receipts yet.</td></tr>'; return; }
+  const sorted = [...state.receipts].map(r=>({...r,date:new Date(r.date)})).sort((a,b)=>b.date-a.date);
+  const dealerOpts = d => state.dealers.map(x=>`<option value="${x.id}" ${x.id===d?'selected':''}>${x.id} — ${x.name}</option>`).join('');
+  tbody.innerHTML = sorted.map(r=>{
+    if (editingReceiptId===r.id) {
+      return `<tr><td>${r.id}</td><td><select id="editRcpDealer_${r.id}">${dealerOpts(r.dealerId)}</select></td>
+        <td><select id="editRcpType_${r.id}"><option value="cash" ${r.type==='cash'?'selected':''}>Cash</option><option value="product_scheme" ${r.type==='product_scheme'?'selected':''}>Product scheme</option></select></td>
+        <td><input type="date" id="editRcpDate_${r.id}" value="${r.date.toISOString().slice(0,10)}"></td>
+        <td class="right"><input type="number" id="editRcpAmount_${r.id}" value="${r.amount}"></td>
+        <td><input id="editRcpNote_${r.id}" value="${(r.note||'').replace(/"/g,'&quot;')}"></td>
+        <td style="white-space:nowrap"><button class="sm primary" onclick="saveEditReceipt('${r.id}')">Save</button> <button class="ghost sm" onclick="cancelEditReceipt()">Cancel</button></td></tr>`;
+    }
+    return `<tr><td>${r.id}</td><td>${dealerName(r.dealerId)}</td><td><span class="badge ${r.type==='product_scheme'?'warning':'accent'}">${r.type==='product_scheme'?'Product scheme':'Cash'}</span></td><td>${fmtDate(r.date)}</td><td class="right num">${inr(r.amount)}</td><td class="hint">${r.note||'—'}</td>
+      <td style="white-space:nowrap"><button class="sm" onclick="startEditReceipt('${r.id}')">Edit</button> <button class="ghost sm" onclick="deleteReceipt('${r.id}')">Remove</button></td></tr>`;
+  }).join('');
+}
+function onRcpTypeChange(){ document.getElementById('rcpNoteField').style.display = document.getElementById('rcpTypeInput').value==='product_scheme' ? 'block' : 'none'; }
+function startEditReceipt(id){ editingReceiptId=id; renderReceiptsTable(); }
+function cancelEditReceipt(){ editingReceiptId=null; renderReceiptsTable(); }
+async function saveEditReceipt(id){
+  const dealerId=document.getElementById('editRcpDealer_'+id).value, dateVal=document.getElementById('editRcpDate_'+id).value, amount=parseFloat(document.getElementById('editRcpAmount_'+id).value);
+  const type=document.getElementById('editRcpType_'+id).value, note=document.getElementById('editRcpNote_'+id).value.trim();
+  if(!dealerId||!dateVal||!amount) return alert('All fields are required.');
+  editingReceiptId=null;
+  const { error } = await sb.from('receipts').upsert({ id, dealer_id:dealerId, receipt_date:dateVal, amount, type, note });
+  if (error) alert('Save failed: ' + error.message);
+  refreshState();
+}
+async function deleteReceipt(id){ if(!confirm('Remove this receipt?'))return; const {error}=await sb.from('receipts').delete().eq('id',id); if(error) alert('Delete failed: '+error.message); refreshState(); }
+
+function allDealerResults(){ const today=new Date(); return state.dealers.filter(d=>d.segment!=='Elite').map(d=>computeDealer(d, state.invoices, state.receipts, state.postedCredits, state.settings, today)); }
+
+function renderDashboard(){
+  const results = allDealerResults(); const today = new Date();
+  document.getElementById('dealerCount').textContent = state.dealers.length + ' dealers';
+  const alertZone = document.getElementById('alertZone');
+  const defaulters = results.filter(r=>r.defaulterInvoices.length);
+  let html='';
+  if (defaulters.length) html += `<div class="alert danger">🛑 <div><b>${defaulters.length} dealer${defaulters.length>1?'s':''} flagged</b> — invoice unpaid 75+ days (Supreme or Selasa). Dispatch hold recommended: ${defaulters.map(r=>dealerName(r.dealerId)).join(', ')}.</div></div>`;
+  const readyCn = results.filter(r=>cnLinesForDealer(r).some(l=>!state.cnStatus[l.id]||!state.cnStatus[l.id].posted));
+  if (readyCn.length) html += `<div class="alert info">💰 <div><b>${readyCn.length} dealer${readyCn.length>1?'s':''}</b> have earned discount(s) pending a credit note.</div></div>`;
+  alertZone.innerHTML = html;
+
+  const totalBilled = state.invoices.reduce((s,i)=>s+i.billValue,0);
+  const totalEarned = results.reduce((s,r)=>s+r.grandTotalCN,0);
+  const totalOutstanding = results.reduce((s,r)=>s+r.cdInvoices.reduce((a,i)=>a+i.remaining,0),0);
+  document.getElementById('statRow').innerHTML = `
+    <div class="stat"><div class="label">Total billed (all brands)</div><div class="value num">${inr(totalBilled)}</div></div>
+    <div class="stat"><div class="label">Total earned discounts</div><div class="value accent num">${inr(totalEarned)}</div></div>
+    <div class="stat"><div class="label">Outstanding (CD-tracked)</div><div class="value num">${inr(totalOutstanding)}</div></div>
+    <div class="stat"><div class="label">Defaulters</div><div class="value ${defaulters.length?'danger':''} num">${defaulters.length}</div></div>`;
+
+  document.querySelector('#dashTable thead').innerHTML = `<tr><th>Dealer</th><th>Segment</th><th class="right">CD earned</th><th>QTD</th><th>ATD (current FY)</th><th class="right">First order</th><th class="right">Total CN</th><th></th></tr>`;
+  const tbody = document.querySelector('#dashTable tbody');
+  if (!results.length) { tbody.innerHTML='<tr><td colspan="8" class="empty">Add dealers and invoices to see live scheme standing.</td></tr>'; return; }
+  tbody.innerHTML = results.map(r=>{
+    const qtdBadges = r.qtdResults.map(w=>{ const cls=w.finalized?(w.achieved?'accent':'muted'):'warning'; const label=w.finalized?(w.achieved?`${w.window} ✓ (${state.settings.qtdPct}%)`:`${w.window} ✗`):(w.achieved?`${w.window} … (${state.settings.qtdPct}%)`:`${w.window} …`); return `<span class="badge ${cls}" title="${inr(w.billed)} billed">${label}</span>`; }).join(' ');
+    const curFy = getFYLabel(today); const curAtd = r.atdResults.find(a=>a.fy===curFy);
+    let atdCell = r.segment==='Associate' ? '<span class="hint">no Selasa billing yet</span>' : '<span class="hint">n/a</span>';
+    if (curAtd) { if (curAtd.finalized) atdCell = curAtd.slab?`<span class="badge accent">${inr(curAtd.earned)} earned (${curAtd.slab.pct}%)</span>`:'<span class="hint">no slab reached</span>'; else atdCell = curAtd.slab?`<span class="badge warning">${inr(curAtd.projected)} projected (${curAtd.slab.pct}%)</span>`:`<span class="hint">${inr(curAtd.gapToNextSlab)} to first slab</span>`; }
+    const allTranches = r.cdInvoices.flatMap(i=>i.tranches);
+    const cdBase = allTranches.reduce((s,t)=>s+t.amount,0);
+    const distinctPcts = [...new Set(allTranches.filter(t=>t.pct>0).map(t=>t.pct))];
+    let cdPctLabel = '';
+    if (r.totalCD>0.005) cdPctLabel = distinctPcts.length===1 ? ` (${distinctPcts[0]}%)` : ` (avg ${(r.totalCD/cdBase*100).toFixed(2)}%)`;
+    const flagged = r.defaulterInvoices.length>0;
+    return `<tr>
+      <td>${dealerName(r.dealerId)} <span class="hint">${r.dealerId}</span>${flagged?' <span class="badge danger">Defaulter</span>':''}</td>
+      <td>${r.segment}${r.segment==='Associate'?` <span class="hint">(${r.effectiveCdMode})</span>`:''}</td>
+      <td class="right num">${inr(r.totalCD)}<span class="hint">${cdPctLabel}</span></td>
+      <td>${r.segment==='Associate' ? (qtdBadges||'<span class="hint">—</span>') : '<span class="hint">n/a</span>'}</td>
+      <td>${atdCell}</td>
+      <td class="right num">${r.firstOrder && r.firstOrder.earned>0.005 ? `${inr(r.firstOrder.earned)} <span class="hint">(${state.settings.firstOrderPct}%)</span>` : (r.segment==='Associate'?'—':'<span class="hint">n/a</span>')}</td>
+      <td class="right num" style="font-weight:600">${inr(r.grandTotalCN)}</td>
+      <td style="white-space:nowrap"><button class="sm" onclick="toggleDealerDetail('${r.dealerId}')">Details</button> <button class="sm" onclick="openStatement('${r.dealerId}')">Statement</button></td>
+    </tr><tr id="detail-${r.dealerId}" style="display:none"><td colspan="8">${renderDealerDetail(r)}</td></tr>`;
+  }).join('');
+}
+function renderDealerDetail(r){
+  const invRows = r.cdInvoices.map(inv=>{ const tranches = inv.tranches.map(t=>`${inr(t.amount)} @ ${t.pct}% (${t.label}, day ${t.dayDiff})`).join('<br>') || '<span class="hint">unpaid</span>'; const brand = (state.invoices.find(i=>i.id===inv.id)||{}).brand||''; return `<tr><td>${inv.id} <span class="badge brand-${brand.toLowerCase()}">${brand}</span></td><td>${fmtDate(inv.date)}</td><td class="right num">${inr(inv.billValue)}</td><td class="right num">${inv.remaining>1e-9?inr(inv.remaining):'—'}</td><td style="font-size:12px">${tranches}</td><td class="right num">${inr(inv.cdEarned)}</td></tr>`; }).join('');
+  const qtdRows = r.qtdResults.map(w=>`<tr><td>${w.fy} ${w.window}</td><td class="right num">${inr(w.billed)}</td><td class="center">${w.finalized?(w.achieved?'<span class="badge accent">Achieved</span>':'<span class="badge muted">Missed</span>'):'<span class="badge warning">In progress</span>'}</td><td class="right num">${inr(w.finalized?w.earned:w.projected)}</td></tr>`).join('');
+  const atdRows = r.atdResults.map(a=>`<tr><td>${a.fy}</td><td class="right num">${inr(a.billed)}</td><td class="center">${a.finalized?'<span class="badge accent">Finalized</span>':'<span class="badge warning">In progress</span>'}</td><td class="right num">${inr(a.finalized?a.earned:a.projected)}${a.slab?` <span class="hint">(${a.slab.pct}%)</span>`:''}</td><td class="hint">${a.nextSlabPct?`${inr(a.gapToNextSlab)} more → ${a.nextSlabPct}%`:'top slab'}</td></tr>`).join('');
+  return `<div style="padding:6px 0 10px">
+    <h2 style="margin-bottom:8px">Cash Discount — per invoice tranche (${r.effectiveCdMode} mode)</h2>
+    <div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Date</th><th class="right">Bill value</th><th class="right">Outstanding</th><th>Payment tranches</th><th class="right">CD earned</th></tr></thead><tbody>${invRows||'<tr><td colspan="6" class="empty">No CD-eligible invoices</td></tr>'}</tbody></table></div>
+    ${r.segment==='Associate' ? `<h2 style="margin:16px 0 8px">Quarterly TOD (Selasa only)</h2>
+    <div class="table-wrap"><table><thead><tr><th>Period</th><th class="right">Billed</th><th class="center">Status</th><th class="right">Amount</th></tr></thead><tbody>${qtdRows||'<tr><td colspan="4" class="empty">No data</td></tr>'}</tbody></table></div>
+    <h2 style="margin:16px 0 8px">Annual TOD (Selasa only)</h2>
+    <div class="table-wrap"><table><thead><tr><th>FY</th><th class="right">Billed</th><th class="center">Status</th><th class="right">Amount</th><th>Next slab</th></tr></thead><tbody>${atdRows||'<tr><td colspan="5" class="empty">No data</td></tr>'}</tbody></table></div>` : ''}
+  </div>`;
+}
+function toggleDealerDetail(id){ const row=document.getElementById('detail-'+id); row.style.display = row.style.display==='none'?'table-row':'none'; }
+
+function openStatement(dealerId){
+  const d = dealerObj(dealerId); if (!d) return;
+  const today = new Date();
+  const r = computeDealer(d, state.invoices, state.receipts, state.postedCredits, state.settings, today);
+  const dealerInvs = state.invoices.filter(i=>i.dealerId===dealerId);
+  const dealerRcpts = state.receipts.filter(r=>r.dealerId===dealerId);
+  const totalBilled = dealerInvs.reduce((s,i)=>s+i.billValue,0);
+  const totalCash = dealerRcpts.filter(x=>x.type==='cash').reduce((s,x)=>s+x.amount,0);
+  const totalProductScheme = dealerRcpts.filter(x=>x.type==='product_scheme').reduce((s,x)=>s+x.amount,0);
+  const outstanding = r.cdInvoices.reduce((s,i)=>s+i.remaining,0);
+
+  // Scheme lines: both already-posted (frozen) and still-pending (live) so the dealer sees the full picture
+  const postedLines = allPostedCnRows().filter(l=>l.dealerId===dealerId);
+  const pendingLines = cnLinesForDealer(r);
+  const schemeRows = [
+    ...postedLines.map(l=>({scheme:l.scheme, ref:l.ref, amount:l.amount, status:'Credited'})),
+    ...pendingLines.map(l=>({scheme:l.scheme, ref:l.ref, amount:l.amount, status:'Earned, pending credit note'})),
+  ];
+  const totalSchemeValue = schemeRows.reduce((s,l)=>s+(l.amount||0),0);
+
+  const html = `
+    <h1>${d.name}</h1>
+    <p class="sub">Dealer ID ${d.id} · ${d.segment} Partner · Statement as of ${fmtDate(today)}</p>
+    <div class="statement-grid">
+      <div class="statement-box"><div class="label">Total billed</div><div class="value num">${inr(totalBilled)}</div></div>
+      <div class="statement-box"><div class="label">Total paid (cash)</div><div class="value num">${inr(totalCash)}</div></div>
+      <div class="statement-box"><div class="label">Product scheme credits</div><div class="value num">${inr(totalProductScheme)}</div></div>
+      <div class="statement-box"><div class="label">Scheme discounts (${schemeRows.length} item${schemeRows.length===1?'':'s'})</div><div class="value num accent">${inr(totalSchemeValue)}</div></div>
+    </div>
+    <div class="statement-box" style="margin-bottom:20px"><div class="label">Current balance outstanding</div><div class="value num">${inr(outstanding)}</div></div>
+    <h2>How you've saved through schemes</h2>
+    <table><thead><tr><th>Scheme</th><th>Reference</th><th class="right">Amount</th><th>Status</th></tr></thead><tbody>
+      ${schemeRows.length ? schemeRows.map(l=>`<tr><td>${l.scheme}</td><td>${l.ref}</td><td class="right num">${l.amount!=null?inr(l.amount):'—'}</td><td class="hint">${l.status}</td></tr>`).join('') : '<tr><td colspan="4" class="empty">No schemes earned yet</td></tr>'}
+    </tbody></table>
+    <h2>Payment summary</h2>
+    <table><thead><tr><th>Type</th><th class="right">Count</th><th class="right">Total</th></tr></thead><tbody>
+      <tr><td>Cash received</td><td class="right num">${dealerRcpts.filter(x=>x.type==='cash').length}</td><td class="right num">${inr(totalCash)}</td></tr>
+      <tr><td>Product scheme credit notes</td><td class="right num">${dealerRcpts.filter(x=>x.type==='product_scheme').length}</td><td class="right num">${inr(totalProductScheme)}</td></tr>
+      <tr><td>Scheme discounts (CD/TOD/First Order)</td><td class="right num">${schemeRows.length}</td><td class="right num">${inr(totalSchemeValue)}</td></tr>
+    </tbody></table>
+    <p class="hint">Total billed (${inr(totalBilled)}) minus cash, product-scheme credits, and credited scheme discounts leaves the outstanding balance above. "Earned, pending credit note" items are not yet reflected in the balance until posted.</p>
+  `;
+  document.getElementById('statementBody').innerHTML = html;
+  document.getElementById('statementOverlay').classList.add('active');
+}
+function closeStatement(){ document.getElementById('statementOverlay').classList.remove('active'); }
+
+function cnLinesForDealer(r){
+  const lines = [];
+  r.cdInvoices.forEach(inv=>{ inv.tranches.forEach((t,idx)=>{ if (t.pct>0 && t.amount*t.pct/100>0.005) { const brand=(state.invoices.find(i=>i.id===inv.id)||{}).brand||''; lines.push({id:`cd:${inv.id}:${idx}`, dealerId:r.dealerId, scheme:`Cash Discount (${t.pct}%)`, ref:`${inv.id} [${brand}] — ${t.label}`, amount:t.amount*t.pct/100, kind:'cd', targetInvoiceId:inv.id}); } }); });
+  r.qtdResults.forEach(w=>{ if (w.finalized && w.achieved && w.earned>0.005) lines.push({id:`qtd:${r.dealerId}:${w.fy}:${w.window}`, dealerId:r.dealerId, scheme:`Quarterly TOD (${state.settings.qtdPct}%)`, ref:`${w.fy} ${w.window}`, amount:w.earned, kind:'qtd', targetInvoiceId:null}); });
+  r.atdResults.forEach(a=>{ if (a.finalized && a.earned>0.005) lines.push({id:`atd:${r.dealerId}:${a.fy}`, dealerId:r.dealerId, scheme:`Annual TOD (${a.slab?a.slab.pct:'?'}%)`, ref:a.fy, amount:a.earned, kind:'atd', targetInvoiceId:null}); });
+  if (r.firstOrder && r.firstOrder.earned>0.005) lines.push({id:`first:${r.dealerId}`, dealerId:r.dealerId, scheme:`First Order Support (${state.settings.firstOrderPct}%)`, ref:r.firstOrder.invoiceId, amount:r.firstOrder.earned, kind:'first_order', targetInvoiceId:r.firstOrder.invoiceId});
+  // Exclude lines already posted (they're now fed into the ledger via postedCredits; showing a live
+  // recompute for them again would be misleading since the amount is frozen at posting time).
+  return lines.filter(l => !(state.cnStatus[l.id] && state.cnStatus[l.id].posted));
+}
+function allCnLines(){ return allDealerResults().flatMap(cnLinesForDealer); }
+function allPostedCnRows(){
+  return Object.entries(state.cnStatus).filter(([id,v])=>v.posted).map(([id,v])=>({
+    id, dealerId:v.dealerId, scheme: v.kind ? `${({cd:'Cash Discount',qtd:'Quarterly TOD',atd:'Annual TOD',first_order:'First Order Support'})[v.kind]||v.kind}` : '(legacy record)',
+    ref: v.refLabel || '—', amount: v.amount!=null ? parseFloat(v.amount) : null,
+  }));
+}
+
+let cnLineCache = {};
+function renderCreditNotes(){
+  const pending = allCnLines();
+  const posted = allPostedCnRows();
+  pending.forEach(l=>cnLineCache[l.id]=l);
+  const badge = document.getElementById('cnBadge');
+  badge.style.display = pending.length?'inline-block':'none'; badge.textContent = pending.length;
+  let rows;
+  if (cnFilter==='pending') rows = pending.map(l=>({...l, posted:false}));
+  else if (cnFilter==='posted') rows = posted.map(l=>({...l, posted:true}));
+  else rows = [...pending.map(l=>({...l,posted:false})), ...posted.map(l=>({...l,posted:true}))];
+  const tbody = document.getElementById('cnTableBody');
+  document.getElementById('cnEmpty').style.display = rows.length?'none':'block';
+  tbody.innerHTML = rows.map(l=>{
+    const hasAmount = l.amount != null;
+    const taxable = hasAmount ? l.amount/1.18 : null, gst = hasAmount ? l.amount-taxable : null;
+    return `<tr><td>${dealerName(l.dealerId)}</td><td>${l.scheme}</td><td>${l.ref}</td>
+      <td class="right num">${hasAmount?inr(taxable):'—'}</td><td class="right num">${hasAmount?inr(gst):'—'}</td><td class="right num" style="font-weight:600">${hasAmount?inr(l.amount):'—'}</td>
+      <td class="center"><button class="sm ${l.posted?'':'primary'}" onclick="toggleCnStatus('${l.id}', ${!l.posted})">${l.posted?'Posted ✓ (undo)':'Mark posted'}</button></td></tr>`;
+  }).join('');
+}
+async function toggleCnStatus(lineId, posted){
+  const payload = { line_id: lineId, posted, posted_at: new Date().toISOString() };
+  if (posted) {
+    const l = cnLineCache[lineId];
+    if (l) { payload.dealer_id = l.dealerId; payload.amount = l.amount; payload.target_invoice_id = l.targetInvoiceId; payload.scheme_kind = l.kind; payload.ref_label = l.ref; }
+  }
+  const { error } = await sb.from('cn_status').upsert(payload);
+  if (error) alert('Failed: ' + error.message);
+  refreshState();
+}
+
+function renderSettingsForm(){
+  const s = state.settings; if (!s || !s.atdSlabs) return;
+  document.getElementById('s_cdAdvancePct').value=s.cdAdvancePct; document.getElementById('s_cd30Pct').value=s.cd30Pct;
+  document.getElementById('s_cd45Pct').value=s.cd45Pct; document.getElementById('s_cd60Pct').value=s.cd60Pct;
+  document.getElementById('s_defaulterDays').value=s.defaulterDays; document.getElementById('s_qtdThreshold').value=s.qtdThreshold;
+  document.getElementById('s_qtdPct').value=s.qtdPct; document.getElementById('s_launchFY').value=s.launchFY; document.getElementById('s_firstOrderPct').value=s.firstOrderPct;
+  document.getElementById('atdSlabBody').innerHTML = s.atdSlabs.map((sl,idx)=>`<tr>
+    <td><input type="number" class="num" data-idx="${idx}" data-field="min" value="${sl.min}" onchange="updateSlabField(this)"></td>
+    <td><input type="number" class="num" data-idx="${idx}" data-field="max" value="${sl.max==null?'':sl.max}" placeholder="no limit" onchange="updateSlabField(this)"></td>
+    <td><input type="number" step="0.1" class="num" data-idx="${idx}" data-field="pct" value="${sl.pct}" onchange="updateSlabField(this)"></td></tr>`).join('');
+  if (state.logo) { document.getElementById('logoPreview').src = state.logo; document.getElementById('logoPreviewWrap').style.display='block'; }
+}
+function updateSlabField(el){ const idx=parseInt(el.dataset.idx,10), field=el.dataset.field; state.settings.atdSlabs[idx][field] = el.value===''?null:parseFloat(el.value); }
+
+function renderAll(){ renderDealerDropdowns(); renderDealersTable(); renderInvoicesTable(); renderReceiptsTable(); renderDashboard(); renderCreditNotes(); renderSettingsForm(); }
+
+// ============================== EVENTS ==============================
+document.getElementById('addDealerBtn').addEventListener('click', async ()=>{
+  const id=document.getElementById('dealerIdInput').value.trim(), name=document.getElementById('dealerNameInput').value.trim();
+  const segment=document.getElementById('dealerSegmentInput').value, cdMode=document.getElementById('dealerCdModeInput').value;
+  const cdCutoverDate=document.getElementById('dealerCutoverInput').value||null, tallyLedgerName=document.getElementById('dealerLedgerInput').value.trim();
+  if(!id||!name) return alert('Enter both a dealer ID and name.');
+  const { error } = await sb.from('dealers').upsert({ id, name, segment, cd_mode:cdMode, cd_cutover_date:cdCutoverDate, tally_ledger_name:tallyLedgerName });
+  if (error) return alert('Add failed: ' + error.message);
+  document.getElementById('dealerIdInput').value=''; document.getElementById('dealerNameInput').value=''; document.getElementById('dealerLedgerInput').value='';
+  refreshState();
+});
+document.getElementById('importDealersBtn').addEventListener('click', async ()=>{
+  const rows = parseCsv(document.getElementById('dealerCsv').value); let ok=0;
+  for (const row of rows) { if (row.dealer_id && row.dealer_name) { const {error}=await sb.from('dealers').upsert({ id:row.dealer_id.trim(), name:row.dealer_name.trim(), segment:row.segment||'Associate', cd_mode:row.cd_mode||'combined', cd_cutover_date:row.cutover_date||null }); if(!error) ok++; } }
+  document.getElementById('dealerCsv').value=''; alert(`Imported ${ok} dealer row(s).`); refreshState();
+});
+document.getElementById('addInvoiceBtn').addEventListener('click', async ()=>{
+  const no=document.getElementById('invNoInput').value.trim(), dealerId=document.getElementById('invDealerInput').value, brand=document.getElementById('invBrandInput').value;
+  const dateVal=document.getElementById('invDateInput').value, billValue=parseFloat(document.getElementById('invValueInput').value);
+  if(!no||!dealerId||!dateVal||!billValue) return alert('Fill in invoice number, dealer, date and bill value.');
+  const { error } = await sb.from('invoices').upsert({ id:no, dealer_id:dealerId, brand, invoice_date:dateVal, bill_value:billValue });
+  if (error) return alert('Add failed: ' + error.message);
+  document.getElementById('invNoInput').value=''; document.getElementById('invValueInput').value=''; refreshState();
+});
+document.getElementById('importInvoicesBtn').addEventListener('click', async ()=>{
+  const rows = parseCsv(document.getElementById('invoiceCsv').value); let ok=0;
+  for (const row of rows) { if (row.invoice_no && row.dealer_id && row.date && row.bill_value) { const {error}=await sb.from('invoices').upsert({ id:row.invoice_no.trim(), dealer_id:row.dealer_id.trim(), brand:(row.brand||'Selasa').trim(), invoice_date:row.date.trim(), bill_value:parseFloat(row.bill_value) }); if(!error) ok++; } }
+  document.getElementById('invoiceCsv').value=''; alert(`Imported ${ok} of ${rows.length} invoice row(s).`); refreshState();
+});
+document.getElementById('addReceiptBtn').addEventListener('click', async ()=>{
+  const no=document.getElementById('rcpNoInput').value.trim(), dealerId=document.getElementById('rcpDealerInput').value, dateVal=document.getElementById('rcpDateInput').value, amount=parseFloat(document.getElementById('rcpAmountInput').value);
+  const type=document.getElementById('rcpTypeInput').value, note=document.getElementById('rcpNoteInput').value.trim();
+  if(!no||!dealerId||!dateVal||!amount) return alert('Fill in receipt number, dealer, date and amount.');
+  const { error } = await sb.from('receipts').upsert({ id:no, dealer_id:dealerId, receipt_date:dateVal, amount, type, note });
+  if (error) return alert('Add failed: ' + error.message);
+  document.getElementById('rcpNoInput').value=''; document.getElementById('rcpAmountInput').value=''; document.getElementById('rcpNoteInput').value=''; refreshState();
+});
+document.getElementById('importReceiptsBtn').addEventListener('click', async ()=>{
+  const rows = parseCsv(document.getElementById('receiptCsv').value); let ok=0;
+  for (const row of rows) { if (row.receipt_no && row.dealer_id && row.date && row.amount) { const {error}=await sb.from('receipts').upsert({ id:row.receipt_no.trim(), dealer_id:row.dealer_id.trim(), receipt_date:row.date.trim(), amount:parseFloat(row.amount), type:(row.type||'cash').trim(), note:(row.note||'').trim() }); if(!error) ok++; } }
+  document.getElementById('receiptCsv').value=''; alert(`Imported ${ok} of ${rows.length} receipt row(s).`); refreshState();
+});
+document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
+  const s = { ...state.settings };
+  s.cdAdvancePct=parseFloat(document.getElementById('s_cdAdvancePct').value); s.cd30Pct=parseFloat(document.getElementById('s_cd30Pct').value);
+  s.cd45Pct=parseFloat(document.getElementById('s_cd45Pct').value); s.cd60Pct=parseFloat(document.getElementById('s_cd60Pct').value);
+  s.defaulterDays=parseInt(document.getElementById('s_defaulterDays').value,10); s.qtdThreshold=parseFloat(document.getElementById('s_qtdThreshold').value);
+  s.qtdPct=parseFloat(document.getElementById('s_qtdPct').value); s.launchFY=document.getElementById('s_launchFY').value.trim(); s.firstOrderPct=parseFloat(document.getElementById('s_firstOrderPct').value);
+  const { error } = await sb.from('settings').update({ data: s }).eq('id', 1);
+  if (error) return alert('Save failed: ' + error.message);
+  document.getElementById('settingsSavedMsg').textContent='Saved ✓'; setTimeout(()=>document.getElementById('settingsSavedMsg').textContent='',2000);
+  refreshState();
+});
+document.getElementById('logoUpload').addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if (!file) return;
+  if (file.size > 1024*1024) { alert('Please use an image under 1MB.'); return; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const merged = { ...state.settings, logo: reader.result };
+    const { error } = await sb.from('settings').update({ data: merged }).eq('id', 1);
+    if (error) alert('Logo upload failed: ' + error.message);
+    refreshState();
+  };
+  reader.readAsDataURL(file);
+});
+document.getElementById('exportCnBtn').addEventListener('click', ()=>{
+  const lines = allCnLines();
+  const header = 'Dealer ID,Dealer Name,Scheme,Reference,Taxable Value,GST (18%),CN Value,Status\n';
+  const rows = lines.map(l=>{ const taxable=(l.amount/1.18).toFixed(2), gst=(l.amount-l.amount/1.18).toFixed(2); const posted=!!(state.cnStatus[l.id]&&state.cnStatus[l.id].posted); return [l.dealerId,dealerName(l.dealerId),l.scheme,l.ref,taxable,gst,l.amount.toFixed(2),posted?'Posted':'Pending'].map(v=>`"${v}"`).join(','); }).join('\n');
+  const blob = new Blob([header+rows], {type:'text/csv'}); const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='selasa-credit-note-register.csv'; a.click(); URL.revokeObjectURL(url);
+});
+
+// window exposure for inline onclick
+window.startEditDealer=startEditDealer; window.cancelEditDealer=cancelEditDealer; window.saveEditDealer=saveEditDealer; window.deleteDealer=deleteDealer;
+window.startEditInvoice=startEditInvoice; window.cancelEditInvoice=cancelEditInvoice; window.saveEditInvoice=saveEditInvoice; window.deleteInvoice=deleteInvoice;
+window.startEditReceipt=startEditReceipt; window.cancelEditReceipt=cancelEditReceipt; window.saveEditReceipt=saveEditReceipt; window.deleteReceipt=deleteReceipt;
+window.toggleDealerDetail=toggleDealerDetail; window.updateSlabField=updateSlabField; window.toggleCnStatus=toggleCnStatus;
+window.openStatement=openStatement; window.closeStatement=closeStatement;
+window.onSegmentChange=onSegmentChange; window.onCdModeChange=onCdModeChange; window.onRcpTypeChange=onRcpTypeChange;
+</script>
+</body>
+</html>
