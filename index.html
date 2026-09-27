@@ -408,7 +408,9 @@ let state = { dealers:[], invoices:[], receipts:[], settings:{atdSlabs:[]}, cnSt
 let editingDealerId=null, editingInvoiceId=null, editingReceiptId=null, cnFilter='pending';
 let pollTimer = null;
 
+let refreshVersion = 0;
 async function refreshState() {
+  const myVersion = ++refreshVersion;
   try {
     const [dealersRes, invoicesRes, receiptsRes, settingsRes, cnRes] = await Promise.all([
       sb.from('dealers').select('*'),
@@ -418,6 +420,7 @@ async function refreshState() {
       sb.from('cn_status').select('*'),
     ]);
     for (const r of [dealersRes, invoicesRes, receiptsRes, settingsRes, cnRes]) if (r.error) throw r.error;
+    if (myVersion !== refreshVersion) return; // a newer refresh already started/finished — discard this stale result
     state.dealers = dealersRes.data.map(d=>({ id:d.id, name:d.name, segment:d.segment, cdMode:d.cd_mode, cdCutoverDate:d.cd_cutover_date, tallyLedgerName:d.tally_ledger_name }));
     state.invoices = invoicesRes.data.map(i=>({ id:i.id, dealerId:i.dealer_id, brand:i.brand, date:i.invoice_date, billValue:parseFloat(i.bill_value) }));
     state.receipts = receiptsRes.data.map(r=>({ id:r.id, dealerId:r.dealer_id, date:r.receipt_date, amount:parseFloat(r.amount), type:r.type||'cash', note:r.note||'' }));
@@ -435,6 +438,7 @@ async function refreshState() {
     if (state.logo) { document.getElementById('sidebarLogo').src = state.logo; document.getElementById('sidebarLogo').style.display='block'; }
     renderAll();
   } catch (e) {
+    if (myVersion !== refreshVersion) return;
     document.getElementById('connBanner').style.display = 'flex';
     document.getElementById('connBannerText').textContent = "Can't reach the database (" + (e.message||e) + "). Check your internet connection.";
   }
@@ -487,11 +491,16 @@ function dealerObj(id){ return state.dealers.find(x=>x.id===id); }
 
 function renderDealerDropdowns(){
   const opts = '<option value="">Select dealer…</option>' + state.dealers.map(d=>`<option value="${d.id}">${d.id} — ${d.name}</option>`).join('');
-  document.getElementById('invDealerInput').innerHTML = opts;
-  document.getElementById('rcpDealerInput').innerHTML = opts;
+  ['invDealerInput','rcpDealerInput'].forEach(id=>{
+    const el = document.getElementById(id);
+    const prevValue = el.value;
+    el.innerHTML = opts;
+    if (prevValue && [...el.options].some(o=>o.value===prevValue)) el.value = prevValue;
+  });
 }
 
 function renderDealersTable(){
+  if (editingDealerId && document.getElementById('editDealerName_'+editingDealerId)) return;
   const tbody = document.getElementById('dealerTableBody');
   if (!state.dealers.length) { tbody.innerHTML='<tr><td colspan="6" class="empty">No dealers yet.</td></tr>'; return; }
   tbody.innerHTML = state.dealers.map(d=>{
@@ -531,6 +540,7 @@ async function saveEditDealer(id){
 async function deleteDealer(id){ if(!confirm('Remove this dealer?'))return; const {error}=await sb.from('dealers').delete().eq('id',id); if(error) alert('Delete failed: '+error.message); refreshState(); }
 
 function renderInvoicesTable(){
+  if (editingInvoiceId && document.getElementById('editInvValue_'+editingInvoiceId)) return;
   const tbody = document.getElementById('invTableBody');
   document.getElementById('invCount').textContent = state.invoices.length + ' invoices';
   if (!state.invoices.length) { tbody.innerHTML='<tr><td colspan="7" class="empty">No invoices yet.</td></tr>'; return; }
@@ -574,6 +584,7 @@ async function saveEditInvoice(id){
 async function deleteInvoice(id){ if(!confirm('Remove this invoice?'))return; const {error}=await sb.from('invoices').delete().eq('id',id); if(error) alert('Delete failed: '+error.message); refreshState(); }
 
 function renderReceiptsTable(){
+  if (editingReceiptId && document.getElementById('editRcpAmount_'+editingReceiptId)) return;
   const tbody = document.getElementById('rcpTableBody');
   document.getElementById('rcpCount').textContent = state.receipts.length + ' receipts';
   if (!state.receipts.length) { tbody.innerHTML='<tr><td colspan="7" class="empty">No receipts yet.</td></tr>'; return; }
@@ -752,18 +763,19 @@ function renderCreditNotes(){
     const taxable = hasAmount ? l.amount/1.18 : null, gst = hasAmount ? l.amount-taxable : null;
     return `<tr><td>${dealerName(l.dealerId)}</td><td>${l.scheme}</td><td>${l.ref}</td>
       <td class="right num">${hasAmount?inr(taxable):'—'}</td><td class="right num">${hasAmount?inr(gst):'—'}</td><td class="right num" style="font-weight:600">${hasAmount?inr(l.amount):'—'}</td>
-      <td class="center"><button class="sm ${l.posted?'':'primary'}" onclick="toggleCnStatus('${l.id}', ${!l.posted})">${l.posted?'Posted ✓ (undo)':'Mark posted'}</button></td></tr>`;
+      <td class="center"><button class="sm ${l.posted?'':'primary'}" onclick="toggleCnStatus('${l.id}', ${!l.posted}, this)">${l.posted?'Posted ✓ (undo)':'Mark posted'}</button></td></tr>`;
   }).join('');
 }
-async function toggleCnStatus(lineId, posted){
+async function toggleCnStatus(lineId, posted, btnEl){
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = posted ? 'Posting…' : 'Undoing…'; }
   const payload = { line_id: lineId, posted, posted_at: new Date().toISOString() };
   if (posted) {
     const l = cnLineCache[lineId];
     if (l) { payload.dealer_id = l.dealerId; payload.amount = l.amount; payload.target_invoice_id = l.targetInvoiceId; payload.scheme_kind = l.kind; payload.ref_label = l.ref; }
   }
   const { error } = await sb.from('cn_status').upsert(payload);
-  if (error) alert('Failed: ' + error.message);
-  refreshState();
+  if (error) { alert('Failed: ' + error.message); if (btnEl) { btnEl.disabled = false; btnEl.textContent = posted ? 'Mark posted' : 'Posted ✓ (undo)'; } return; }
+  await refreshState();
 }
 
 function renderSettingsForm(){
