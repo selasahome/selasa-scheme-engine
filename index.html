@@ -409,6 +409,7 @@ let editingDealerId=null, editingInvoiceId=null, editingReceiptId=null, cnFilter
 let pollTimer = null;
 
 let refreshVersion = 0;
+let lastDataSignature = null;
 async function refreshState() {
   const myVersion = ++refreshVersion;
   try {
@@ -421,6 +422,9 @@ async function refreshState() {
     ]);
     for (const r of [dealersRes, invoicesRes, receiptsRes, settingsRes, cnRes]) if (r.error) throw r.error;
     if (myVersion !== refreshVersion) return; // a newer refresh already started/finished — discard this stale result
+    const signature = JSON.stringify([dealersRes.data, invoicesRes.data, receiptsRes.data, settingsRes.data, cnRes.data]);
+    if (signature === lastDataSignature) { document.getElementById('connBanner').style.display = 'none'; return; } // nothing changed — leave the screen alone
+    lastDataSignature = signature;
     state.dealers = dealersRes.data.map(d=>({ id:d.id, name:d.name, segment:d.segment, cdMode:d.cd_mode, cdCutoverDate:d.cd_cutover_date, tallyLedgerName:d.tally_ledger_name }));
     state.invoices = invoicesRes.data.map(i=>({ id:i.id, dealerId:i.dealer_id, brand:i.brand, date:i.invoice_date, billValue:parseFloat(i.bill_value) }));
     state.receipts = receiptsRes.data.map(r=>({ id:r.id, dealerId:r.dealer_id, date:r.receipt_date, amount:parseFloat(r.amount), type:r.type||'cash', note:r.note||'' }));
@@ -662,7 +666,7 @@ function renderDashboard(){
       <td class="right num">${r.firstOrder && r.firstOrder.earned>0.005 ? `${inr(r.firstOrder.earned)} <span class="hint">(${state.settings.firstOrderPct}%)</span>` : (r.segment==='Associate'?'—':'<span class="hint">n/a</span>')}</td>
       <td class="right num" style="font-weight:600">${inr(r.grandTotalCN)}</td>
       <td style="white-space:nowrap"><button class="sm" onclick="toggleDealerDetail('${r.dealerId}')">Details</button> <button class="sm" onclick="openStatement('${r.dealerId}')">Statement</button></td>
-    </tr><tr id="detail-${r.dealerId}" style="display:none"><td colspan="8">${renderDealerDetail(r)}</td></tr>`;
+    </tr><tr id="detail-${r.dealerId}" style="display:${expandedDealers.has(r.dealerId)?'table-row':'none'}"><td colspan="8">${renderDealerDetail(r)}</td></tr>`;
   }).join('');
 }
 function renderDealerDetail(r){
@@ -678,7 +682,13 @@ function renderDealerDetail(r){
     <div class="table-wrap"><table><thead><tr><th>FY</th><th class="right">Billed</th><th class="center">Status</th><th class="right">Amount</th><th>Next slab</th></tr></thead><tbody>${atdRows||'<tr><td colspan="5" class="empty">No data</td></tr>'}</tbody></table></div>` : ''}
   </div>`;
 }
-function toggleDealerDetail(id){ const row=document.getElementById('detail-'+id); row.style.display = row.style.display==='none'?'table-row':'none'; }
+const expandedDealers = new Set();
+function toggleDealerDetail(id){
+  const row=document.getElementById('detail-'+id); if(!row) return;
+  const opening = row.style.display==='none';
+  row.style.display = opening ? 'table-row' : 'none';
+  if (opening) expandedDealers.add(id); else expandedDealers.delete(id);
+}
 
 function openStatement(dealerId){
   const d = dealerObj(dealerId); if (!d) return;
